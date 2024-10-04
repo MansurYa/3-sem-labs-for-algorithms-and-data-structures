@@ -6277,8 +6277,8 @@
         "23:59": 15
     },
     "purchase_quantity_distribution": {
-        "mean": 5,
-        "standard_deviation": 5
+        "mean": 10,
+        "standard_deviation": 20
     },
     "payment_systems_distribution": {
         "AMERICAN EXPRESS": 1,

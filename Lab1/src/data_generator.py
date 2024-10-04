@@ -65,22 +65,25 @@ def validate_settings(settings: dict) -> None:
 
 def load_bin_list(bin_list_path: str) -> list:
     """
-    Загружает BIN-коды из CSV файла.
+    Загружает BIN-коды и связанные с ними данные из CSV файла.
 
     :param bin_list_path: Путь к файлу с BIN-кодами в формате CSV
-    :return: Возвращает список BIN-кодов, загруженных из файла
-    :raises FileNotFoundError: Если файл bin_list_path не найден
-    :raises ValueError: Если структура файла bin_list_path некорректна или файл пуст
+    :return: Возвращает список словарей с данными о BIN-кодах
     """
     bin_list = []
+    required_columns = ['bin', 'brand', 'issuer']
     try:
         with open(bin_list_path, newline='', encoding='utf-8') as f:
             reader = csv.DictReader(f, delimiter=';')
             for row in reader:
-                if 'bin' in row:
-                    bin_list.append(row['bin'])
+                if all(col in row for col in required_columns):
+                    bin_list.append({
+                        'bin': row['bin'],
+                        'brand': row['brand'],
+                        'issuer': row['issuer']
+                    })
                 else:
-                    raise ValueError("Отсутствует столбец 'bin' в файле bin_list_path.")
+                    raise ValueError("Отсутствует один из необходимых столбцов ('bin', 'issuer', 'brand') в файле bin_list_path.")
     except FileNotFoundError:
         raise FileNotFoundError(f"Файл {bin_list_path} не найден.")
     except Exception as e:
@@ -114,6 +117,55 @@ def initialize_output_file(output_path: str) -> int:
         return 0
 
 
+def precompute_bin_codes_and_weights(settings: dict, bin_list: list):
+    """
+    Предварительно вычисляет списки bin_codes и weights на основе настроек и списка BIN-кодов.
+
+    :param settings: Словарь настроек, содержащий 'banks_distribution'
+    :param bin_list: Список словарей с данными о BIN-кодах (каждый словарь содержит ключи 'bin', 'brand', 'issuer')
+    :return: Возвращает два списка:
+             - bin_codes: список BIN-кодов, связанных с банками в 'banks_distribution'
+             - weights: список весов, соответствующих каждому BIN-коду на основе распределения банков
+    :raises ValueError: Если нет доступных BIN-кодов для банков из 'banks_distribution'
+    """
+    banks_distribution = settings["banks_distribution"]
+
+    issuer_to_bins = {}
+    for bin_entry in bin_list:
+        issuer = bin_entry['issuer']
+        bin_code = bin_entry['bin']
+        if issuer in banks_distribution:
+            issuer_to_bins.setdefault(issuer, []).append(bin_code)
+
+    if not issuer_to_bins:
+        raise ValueError("Нет доступных BIN-кодов для заданного распределения банков.")
+
+    # Создаём списки bin_codes и их соответствующих весов
+    bin_codes = []
+    weights = []
+    for issuer, bins in issuer_to_bins.items():
+        bank_weight = banks_distribution[issuer]
+        num_bins = len(bins)
+        weight_per_bin = bank_weight / num_bins
+        for bin_code in bins:
+            bin_codes.append(bin_code)
+            weights.append(weight_per_bin)
+
+    return bin_codes, weights
+
+
+def generate_bin_code(bin_codes: list, weights: list) -> str:
+    """
+    Генерирует BIN-код на основе переданных списков bin_codes и weights.
+
+    :param bin_codes: Список BIN-кодов, доступных для генерации
+    :param weights: Список весов, соответствующих каждому BIN-коду
+    :return: Возвращает случайно выбранный BIN-код на основе весов
+    :raises ValueError: Если списки bin_codes и weights пусты или их длина не совпадает
+    """
+    return random.choices(bin_codes, weights=weights, k=1)[0]
+
+
 def generate_card_number(bin_code: str, set_card_numbers: set) -> str:
     """
     Генерирует уникальный номер карты на основе BIN-кода и случайного суффикса.
@@ -123,11 +175,11 @@ def generate_card_number(bin_code: str, set_card_numbers: set) -> str:
     :return: Возвращает уникальный номер карты в формате строки
     """
     while True:
-        card_suffix = ''.join([str(random.randint(0, 9)) for _ in range(10)])  # Генерация 10-значного суффикса
+        card_suffix = ''.join([str(random.randint(0, 9)) for _ in range(10)])
         card_number = bin_code + card_suffix
 
         if card_number not in set_card_numbers:
-            set_card_numbers.add(card_number)  # Добавляем уникальный номер в множество
+            set_card_numbers.add(card_number)
             return card_number
 
 
@@ -234,22 +286,17 @@ def write_to_file(output_path: str, rows: list, sheet_name: str = "Sheet1") -> N
 
     try:
         if os.path.exists(output_path):
-            # Используем openpyxl для дозаписи данных
             with pd.ExcelWriter(output_path, mode='a', engine='openpyxl', if_sheet_exists='overlay') as writer:
-                # Получаем существующее количество строк на листе
                 if sheet_name in writer.sheets:
                     existing_rows = writer.sheets[sheet_name].max_row
                 else:
                     existing_rows = 0
 
-                # Проверяем лимит строк, если превышен, создаём новый лист
                 if existing_rows + len(df_new) > max_rows_per_sheet:
-                    sheet_name = f"{sheet_name}_part2"  # Создаём новый лист
+                    sheet_name = f"{sheet_name}_part2"
 
-                # Записываем данные на существующий или новый лист
                 df_new.to_excel(writer, sheet_name=sheet_name, index=False, header=False, startrow=existing_rows)
         else:
-            # Если файла нет, создаём новый
             df_new.to_excel(output_path, sheet_name=sheet_name, index=False)
     except PermissionError:
         raise PermissionError(f"Недостаточно прав для записи в файл {output_path}. Проверьте доступ.")
@@ -269,15 +316,16 @@ def generate_data(output_path: str, target_row_count: int, settings: dict, bin_l
     """
     set_card_numbers = set()
     buffer = []
-    buffer_size = 100000
+    buffer_size = 100000000
 
     existing_row_count = initialize_output_file(output_path)
     total_count_of_generated_rows = existing_row_count
 
-    # Инициализация прогресс-бара
+    bin_codes, weights = precompute_bin_codes_and_weights(settings, bin_list)
+
     with tqdm(total=target_row_count, initial=existing_row_count, unit=" строк") as pbar:
         while total_count_of_generated_rows < target_row_count:
-            bin_code = random.choice(bin_list)
+            bin_code = generate_bin_code(bin_codes, weights)
 
             card_number = generate_card_number(bin_code, set_card_numbers)
 
