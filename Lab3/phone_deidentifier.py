@@ -11,18 +11,6 @@ is_file_loaded = False
 
 
 def compute_salt(phones, numbers):
-    """
-    Вычисляет значение соли, используя массивы телефонов и номеров.
-    Путем сравнения значений телефонных номеров и заданного номера определяет соль,
-    которая затем используется для деобезличивания данных.
-
-    Параметры:
-    - phones: список зашифрованных номеров телефонов
-    - numbers: список известных незашифрованных номеров
-
-    Возвращает:
-    - salt: значение соли, если она найдена, иначе возвращает 0.
-    """
     for phone in phones:
         salt = int(phone) - int(numbers[0])
         if salt < 0:
@@ -36,13 +24,6 @@ def compute_salt(phones, numbers):
 
 
 def sha1(phones):
-    """
-    Хеширует номера телефонов с использованием SHA-1 и сохраняет результаты в 'sha1.txt'.
-    Затем использует hashcat для попытки расшифровки хешей с перебором 11-значных чисел.
-
-    Параметры:
-    - phones: список номеров телефонов
-    """
     phones_sha1 = [hashlib.sha1(phone.encode()).hexdigest() for phone in phones]
     with open('sha1.txt', 'w') as f:
         for phone in phones_sha1:
@@ -53,13 +34,6 @@ def sha1(phones):
 
 
 def sha256(phones):
-    """
-    Хеширует номера телефонов с использованием SHA-256 и сохраняет результаты в 'sha256.txt'.
-    Затем использует hashcat для попытки расшифровки хешей с перебором 11-значных чисел.
-
-    Параметры:
-    - phones: список номеров телефонов
-    """
     phones_sha256 = [hashlib.sha256(phone.encode()).hexdigest() for phone in phones]
     with open('sha256.txt', 'w') as f:
         for phone in phones_sha256:
@@ -70,13 +44,6 @@ def sha256(phones):
 
 
 def sha512(phones):
-    """
-    Хеширует номера телефонов с использованием SHA-512 и сохраняет результаты в 'sha512.txt'.
-    Затем использует hashcat для попытки расшифровки хешей с перебором 11-значных чисел.
-
-    Параметры:
-    - phones: список номеров телефонов
-    """
     phones_sha512 = [hashlib.sha512(phone.encode()).hexdigest() for phone in phones]
     with open('sha512.txt', 'w') as f:
         for phone in phones_sha512:
@@ -87,9 +54,6 @@ def sha512(phones):
 
 
 def load_file():
-    """
-    Загружает файл с данными, выбираемый пользователем, и активирует кнопку для деобезличивания.
-    """
     global file_path, is_file_loaded
     file_path = filedialog.askopenfilename()
     if file_path:
@@ -98,10 +62,6 @@ def load_file():
 
 
 def identify():
-    """
-    Загружает данные из Excel-файла, извлекает хеши и первые пять номеров телефонов,
-    затем запускает hashcat для расшифровки хешей.
-    """
     global file_path, phones, numbers
 
     if os.path.exists('output.txt'):
@@ -135,10 +95,6 @@ def identify():
 
 
 def find_salt():
-    """
-    Вычисляет значение соли, используя функцию compute_salt, и сохраняет расшифрованные номера в файл.
-    Проверяет, существуют ли нужные файлы для работы, и удаляет файл для записи, если он уже существует.
-    """
     global phones, numbers
     salt = compute_salt(phones, numbers)
     messagebox.showinfo("Готово", f"Значение соли: {salt}")
@@ -170,13 +126,6 @@ def find_salt():
 
 
 def encrypt(algorithm):
-    """
-    Шифрует данные с использованием выбранного алгоритма (SHA-1, SHA-256 или SHA-512)
-    и сохраняет результат в соответствующем файле.
-
-    Параметры:
-    - algorithm: строка, обозначающая алгоритм ("sha1", "sha256", "sha512").
-    """
     global is_file_loaded, phones
     if not is_file_loaded:
         return
